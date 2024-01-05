@@ -528,6 +528,7 @@ const CACHE_FILE: &str = "cache.json";
 
 pub fn load_version_constructor() -> anyhow::Result<VersionConstructor> {
     if let Ok(file) = File::open(CACHE_FILE) {
+        debug!("using existing cache file..");
         serde_json::from_reader(file).context("failed to parse context")
     } else {
         debug!("creating new cache file..");

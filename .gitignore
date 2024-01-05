@@ -1,3 +1,5 @@
 /target
 /expanded-*.rs
 /cache.json
+/.current_crate
+/results

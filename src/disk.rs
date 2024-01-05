@@ -1,9 +1,10 @@
 use std::{collections::HashMap, path::Path, process::Command};
 
 use anyhow::{anyhow, ensure, Context};
-use log::debug;
+use log::{debug, trace};
 use once_cell::sync::Lazy;
 use regex::Regex;
+use serde::Serialize;
 
 use crate::{
     analyzer::VersionAnalyzer,
@@ -17,16 +18,20 @@ static WARNING_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new("^warning: `[A-Za-z_-]+` \\(\\w+\\) generated (\\d+) warning").unwrap()
 });
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct CrateInfo {
     pub name: String,
     pub version: String,
-    pub published_at: usize,
+    pub published_at: i64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Stats {
-    pub info: CrateInfo,
+    // Ideally we would use a CrateInfo here, but csv doesn't support flatten.
+    pub name: String,
+    pub version: String,
+    pub published_at: i64,
+
     pub edition: usize,
     pub reported_msrv: Option<usize>,
     pub version_signature: f32,
@@ -95,8 +100,11 @@ fn count_clippy_warnings(manifest_path: &Path) -> anyhow::Result<usize> {
 pub fn analyze_single(info: CrateInfo, path: &Path) -> anyhow::Result<Stats> {
     ensure!(path.is_dir(), "path should be a directory");
 
+    debug!("analyzing {} {}..", info.name, info.version);
+
     let manifest_path = path.join("Cargo.toml");
 
+    trace!("expanding code...");
     let expand = Command::new("cargo")
         .arg("expand")
         .arg("--all-features")
@@ -116,6 +124,7 @@ pub fn analyze_single(info: CrateInfo, path: &Path) -> anyhow::Result<Stats> {
     let file: syn::File =
         syn::parse_str(&expanded_source_code).context("could not parse expanded source code")?;
 
+    trace!("analyzing versions...");
     let mut version_analyzer = VersionAnalyzer::new(&VERSION_CONSTRUCTOR);
     version_analyzer.process_file(file);
 
@@ -132,8 +141,12 @@ pub fn analyze_single(info: CrateInfo, path: &Path) -> anyhow::Result<Stats> {
         version_analyzer.unsafe_exprs, version_analyzer.total_exprs
     );
 
+    trace!("finishing up...");
     Ok(Stats {
-        info,
+        name: info.name,
+        version: info.version,
+        published_at: info.published_at,
+
         edition: edition_id(
             package
                 .edition
