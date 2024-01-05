@@ -1,6 +1,11 @@
-use std::{io::Cursor, path::Path, time::Duration};
+use std::{
+    io::Cursor,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use anyhow::Context;
+use clap::Parser;
 use crates_io_api::{SyncClient, Version};
 use disk::{analyze_single, CrateInfo, Stats};
 use flate2::read::GzDecoder;
@@ -17,7 +22,6 @@ mod std_versions;
 
 const TEMP_DIR: &str = ".current_crate";
 const OUT_DIR: &str = "results";
-const VERSION_COUNT: usize = 20;
 
 static API_CLIENT: Lazy<SyncClient> = Lazy::new(|| {
     SyncClient::new(
@@ -27,7 +31,26 @@ static API_CLIENT: Lazy<SyncClient> = Lazy::new(|| {
     .expect("failed to initialize crates.io API client")
 });
 
-fn analyze_version(version: &Version) -> anyhow::Result<Stats> {
+#[derive(Parser)]
+#[command(version)]
+struct Args {
+    /// Crate name on crates.io to analyze
+    crate_: String,
+
+    /// Amount of versions to fetch and analyze
+    #[arg(short, long, default_value_t = 20)]
+    versions: usize,
+
+    /// Location of the output CSV file
+    #[arg(short, long)]
+    out_file: Option<PathBuf>,
+
+    /// Analyze using only the default crate features
+    #[arg(short, long)]
+    not_all_features: bool,
+}
+
+fn analyze_version(version: &Version, all_features: bool) -> anyhow::Result<Stats> {
     let url = Url::parse("https://crates.io/")?.join(&version.dl_path)?;
     trace!("downloading from {url}...");
     let res = reqwest::blocking::get(url).and_then(|res| res.bytes())?;
@@ -45,6 +68,7 @@ fn analyze_version(version: &Version) -> anyhow::Result<Stats> {
             published_at: version.created_at.timestamp(),
         },
         &temp_dir.join(format!("{}-{}", version.crate_name, version.num)),
+        all_features,
     )
     .context("failed to analyze");
 
@@ -53,7 +77,12 @@ fn analyze_version(version: &Version) -> anyhow::Result<Stats> {
     stats
 }
 
-fn analyze_from_crates_io(progress: ProgressBar, name: &str) -> anyhow::Result<Vec<Stats>> {
+fn analyze_from_crates_io(
+    progress: ProgressBar,
+    name: &str,
+    count: usize,
+    all_features: bool,
+) -> anyhow::Result<Vec<Stats>> {
     let res = API_CLIENT
         .get_crate(name)
         .context("failed to get crate information from API")?;
@@ -68,9 +97,9 @@ fn analyze_from_crates_io(progress: ProgressBar, name: &str) -> anyhow::Result<V
 
     // FIXME: Multiple versions released in a short time might make the
     //        version selection inaccurate.
-    if versions.len() > VERSION_COUNT {
-        let indices = (0..VERSION_COUNT)
-            .map(|i| (i * (versions.len() - 1)) / (VERSION_COUNT - 1))
+    if versions.len() > count {
+        let indices = (0..count)
+            .map(|i| (i * (versions.len() - 1)) / (count - 1))
             .collect::<Vec<_>>();
 
         for i in (0..versions.len()).rev() {
@@ -90,7 +119,7 @@ fn analyze_from_crates_io(progress: ProgressBar, name: &str) -> anyhow::Result<V
     for version in versions.iter().progress_with(progress.clone()) {
         progress.set_message(version.num.clone());
 
-        let stat = match analyze_version(version) {
+        let stat = match analyze_version(version, all_features) {
             Ok(stat) => stat,
             Err(err) => {
                 error!("could not analyze {name} {}: {err:#}", version.num);
@@ -106,6 +135,8 @@ fn analyze_from_crates_io(progress: ProgressBar, name: &str) -> anyhow::Result<V
 }
 
 fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+
     let multi = MultiProgress::new();
     let style = ProgressStyle::with_template(
         "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>2}/{len:2} {prefix} {msg}",
@@ -119,25 +150,33 @@ fn main() -> anyhow::Result<()> {
 
     LogWrapper::new(multi.clone(), logger).try_init().unwrap();
 
-    // Create output directory beforehand
-    let out_dir = Path::new(OUT_DIR);
-    std::fs::create_dir_all(out_dir)?;
+    // Prepare output file
+    let csv_path = args.out_file.unwrap_or_else(|| {
+        let out_dir = Path::new(OUT_DIR);
+        std::fs::create_dir_all(out_dir).expect("failed to create results dir");
+        out_dir.join(format!("{}.csv", args.crate_))
+    });
 
     // Analyze the crate versions
-    let name = "regex";
+    let name = &args.crate_;
 
     let progress = multi.add(
-        ProgressBar::new(VERSION_COUNT as u64)
+        ProgressBar::new(args.versions as u64)
             .with_style(style)
             .with_prefix(name.to_string()),
     );
 
-    let stats = analyze_from_crates_io(progress.clone(), name)?;
+    let stats = analyze_from_crates_io(
+        progress.clone(),
+        name,
+        args.versions,
+        !args.not_all_features,
+    )?;
 
-    progress.abandon_with_message(format!("analyzed with {VERSION_COUNT} versions"));
+    progress.abandon_with_message(format!("analyzed with {} versions", stats.len()));
 
     // Write results to CSV
-    let mut writer = csv::Writer::from_path(out_dir.join(format!("{name}.csv")))?;
+    let mut writer = csv::Writer::from_path(csv_path)?;
 
     for stat in stats {
         writer.serialize(stat)?;

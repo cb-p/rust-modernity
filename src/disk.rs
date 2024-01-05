@@ -35,8 +35,13 @@ pub struct Stats {
     pub edition: usize,
     pub reported_msrv: Option<usize>,
     pub version_signature: f32,
+
+    pub unsafe_exprs: usize,
+    pub total_exprs: usize,
     pub unsafe_fraction: f32,
+
     pub clippy_warnings: usize,
+    pub clippy_warnings_per_expr: f32,
 }
 
 fn rust_version_to_number(version: &str) -> Option<usize> {
@@ -78,10 +83,13 @@ fn normalize_versions(versions: &HashMap<String, usize>) -> f32 {
     acc / weight_acc
 }
 
-fn count_clippy_warnings(manifest_path: &Path) -> anyhow::Result<usize> {
-    let clippy = Command::new("cargo")
-        .arg("clippy")
-        .arg("--all-features")
+fn count_clippy_warnings(manifest_path: &Path, all_features: bool) -> anyhow::Result<usize> {
+    let mut clippy = Command::new("cargo");
+    clippy.arg("clippy");
+    if all_features {
+        clippy.arg("--all-features");
+    }
+    let clippy = clippy
         .arg("--manifest-path")
         .arg(manifest_path)
         .output()
@@ -97,7 +105,7 @@ fn count_clippy_warnings(manifest_path: &Path) -> anyhow::Result<usize> {
         .sum())
 }
 
-pub fn analyze_single(info: CrateInfo, path: &Path) -> anyhow::Result<Stats> {
+pub fn analyze_single(info: CrateInfo, path: &Path, all_features: bool) -> anyhow::Result<Stats> {
     ensure!(path.is_dir(), "path should be a directory");
 
     debug!("analyzing {} {}..", info.name, info.version);
@@ -105,9 +113,12 @@ pub fn analyze_single(info: CrateInfo, path: &Path) -> anyhow::Result<Stats> {
     let manifest_path = path.join("Cargo.toml");
 
     trace!("expanding code...");
-    let expand = Command::new("cargo")
-        .arg("expand")
-        .arg("--all-features")
+    let mut expand = Command::new("cargo");
+    expand.arg("expand");
+    if all_features {
+        expand.arg("--all-features");
+    }
+    let expand = expand
         .arg("--manifest-path")
         .arg(&manifest_path)
         .output()
@@ -141,6 +152,10 @@ pub fn analyze_single(info: CrateInfo, path: &Path) -> anyhow::Result<Stats> {
         version_analyzer.unsafe_exprs, version_analyzer.total_exprs
     );
 
+    trace!("counting warnings with clippy...");
+    let clippy_warnings = count_clippy_warnings(&manifest_path, all_features)
+        .context("failed to count clippy warnings")?;
+
     trace!("finishing up...");
     Ok(Stats {
         name: info.name,
@@ -160,8 +175,12 @@ pub fn analyze_single(info: CrateInfo, path: &Path) -> anyhow::Result<Stats> {
             .and_then(|v| v.get().ok())
             .and_then(|v| rust_version_to_number(v)),
         version_signature: normalize_versions(&version_analyzer.version_counts),
+
+        unsafe_exprs: version_analyzer.unsafe_exprs,
+        total_exprs: version_analyzer.total_exprs,
         unsafe_fraction: version_analyzer.unsafe_exprs as f32 / version_analyzer.total_exprs as f32,
-        clippy_warnings: count_clippy_warnings(&manifest_path)
-            .context("failed to count clippy warnings")?,
+
+        clippy_warnings,
+        clippy_warnings_per_expr: clippy_warnings as f32 / version_analyzer.total_exprs as f32,
     })
 }

@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.75"
 cargo_toml = "0.17.2"
+clap = { version = "4.4.13", features = ["derive"] }
 crates_io_api = "0.9.0"
 csv = "1.3.0"
 deflate = { version = "1.0.0", features = ["gzip"] }
