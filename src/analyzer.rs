@@ -380,7 +380,7 @@ impl<'a> VersionAnalyzer<'a> {
             // full_path.extend_from_slice(&self.path);
             // full_path.extend_from_slice(relative_path);
 
-            // println!("checking full path... {full_path:?}");
+            // trace!("checking full path... {full_path:?}");
 
             // if let Some(version) = self.version_constructor.get_version(&full_path) {
             //     self.count_version(version);

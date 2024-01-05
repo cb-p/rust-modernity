@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::Path, process::Command};
 
 use anyhow::{anyhow, ensure, Context};
+use log::debug;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -125,11 +126,11 @@ pub fn analyze_single(info: CrateInfo, path: &Path) -> anyhow::Result<Stats> {
         .package
         .context("no `package` header in manifest")?;
 
-    // println!("{:?}", version_analyzer.version_counts);
-    // println!(
-    //     "unsafe: {}/{}",
-    //     version_analyzer.unsafe_exprs, version_analyzer.total_exprs
-    // );
+    debug!("{:?}", version_analyzer.version_counts);
+    debug!(
+        "unsafe: {}/{}",
+        version_analyzer.unsafe_exprs, version_analyzer.total_exprs
+    );
 
     Ok(Stats {
         info,

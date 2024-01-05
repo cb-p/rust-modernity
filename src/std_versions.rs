@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::Context;
+use log::{debug, trace};
 use serde::{Deserialize, Serialize};
 use syn::UseTree;
 
@@ -373,8 +374,8 @@ impl VersionConstructor {
         root_path: &[String],
         path: &[String],
     ) -> Option<&'a VersionedItem> {
-        // println!("root = {root_path:?} = {}", root.name);
-        // println!("resolving {path:?}...");
+        trace!("root = {root_path:?} = {}", root.name);
+        trace!("resolving {path:?}...");
 
         let mut current = root;
         let mut last: Option<&VersionedItem> = None;
@@ -382,14 +383,14 @@ impl VersionConstructor {
         if !root_path.is_empty() && !path.is_empty() {
             if path[0] == "crate" {
                 let new_root = self.root.children.get(&root_path[0])?;
-                // println!("{:?} crate shorthands to {}", &path[..1], root_path[0]);
+                trace!("{:?} crate shorthands to {}", &path[..1], root_path[0]);
                 return self.resolve_path_from(new_root, &root_path[..1], &path[1..]);
             }
 
             // FIXME: HACK
             if path[0] == "alloc_crate" {
                 let new_root = self.root.children.get("alloc")?;
-                // println!("alloc_crate shorthands to alloc");
+                trace!("alloc_crate shorthands to alloc");
                 return self.resolve_path_from(new_root, &["alloc".to_string()], &path[1..]);
             }
         }
@@ -401,7 +402,7 @@ impl VersionConstructor {
 
         for (i, segment) in path.iter().enumerate() {
             if segment == "super" {
-                // println!("FIXME: super not supported");
+                trace!("FIXME: super not supported");
                 return None;
             }
 
@@ -416,26 +417,26 @@ impl VersionConstructor {
                 continue;
             }
 
-            // println!("not found: {i} = {segment} (full = {path:?}, we are in {root_path:?})");
+            trace!("not found: {i} = {segment} (full = {path:?}, we are in {root_path:?})");
             let mut path_until_here = root_path.to_vec();
             path_until_here.extend_from_slice(&path[..i]);
             let l = path_until_here.pop()?;
 
-            // println!("lets search for aliases starting at {:?}", path_until_here);
+            trace!("lets search for aliases starting at {:?}", path_until_here);
 
             let aliases = self
                 .aliases
                 .iter()
                 .filter(|alias| alias.root == path_until_here);
 
-            // println!("candidates:");
+            trace!("candidates:");
             for alias in aliases {
-                // let root = &alias.root;
-                // let rel = &alias.relative_path;
-                // match &alias.local {
-                //     LocalAlias::Named(name) => println!("  {root:?} :: {name} -> {rel:?}"),
-                //     LocalAlias::GlobChildren => println!("  {root:?} :: * -> {rel:?}"),
-                // }
+                let root = &alias.root;
+                let rel = &alias.relative_path;
+                match &alias.local {
+                    LocalAlias::Named(name) => trace!("  {root:?} :: {name} -> {rel:?}"),
+                    LocalAlias::GlobChildren => trace!("  {root:?} :: * -> {rel:?}"),
+                }
 
                 match &alias.local {
                     LocalAlias::Named(name) => {
@@ -447,25 +448,26 @@ impl VersionConstructor {
                             .or_else(|| self.resolve_path_from(&self.root, &[], &path_until_here))
                             .unwrap();
 
-                        // println!(
-                        //     "found named match! current = {}, last = {}",
-                        //     current.name, last.name
-                        // );
+                        trace!(
+                            "found named match! current = {}, last = {}",
+                            current.name,
+                            last.name
+                        );
 
                         if let Some(new_root) =
                             self.resolve_path_from(last, &path_until_here, &alias.relative_path)
                         {
                             path_until_here.extend(alias.relative_path.iter().cloned());
-                            // println!("re-rooting to {path_until_here:?} for {name}");
+                            trace!("re-rooting to {path_until_here:?} for {name}");
                             return self.resolve_path_from(new_root, &path_until_here, &path[i..]);
                         }
 
                         let new_root =
                             self.resolve_path_from(&self.root, &[], &alias.relative_path)?;
-                        // println!(
-                        //     "absolute re-rooting to {:?} for {name}",
-                        //     &alias.relative_path
-                        // );
+                        trace!(
+                            "absolute re-rooting to {:?} for {name}",
+                            &alias.relative_path
+                        );
                         return self.resolve_path_from(new_root, &alias.relative_path, &path[i..]);
                     }
                     LocalAlias::GlobChildren => {
@@ -478,7 +480,7 @@ impl VersionConstructor {
                         {
                             if new_root.children.contains_key(&l) {
                                 path_until_here.extend(alias.relative_path.iter().cloned());
-                                // println!("re-rooting to {path_until_here:?} for *");
+                                trace!("re-rooting to {path_until_here:?} for *");
                                 return self.resolve_path_from(
                                     new_root,
                                     &path_until_here,
@@ -494,7 +496,7 @@ impl VersionConstructor {
                         };
 
                         if new_root.children.contains_key(&l) {
-                            // println!("absolute re-rooting to {:?} for *", &alias.relative_path);
+                            trace!("absolute re-rooting to {:?} for *", &alias.relative_path);
                             return self.resolve_path_from(
                                 new_root,
                                 &alias.relative_path,
@@ -528,7 +530,7 @@ pub fn load_version_constructor() -> anyhow::Result<VersionConstructor> {
     if let Ok(file) = File::open(CACHE_FILE) {
         serde_json::from_reader(file).context("failed to parse context")
     } else {
-        println!("creating new cache file..");
+        debug!("creating new cache file..");
         let mut version_constructor = VersionConstructor::new();
 
         for crate_ in CRATES {

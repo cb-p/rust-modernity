@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use log::info;
+
 use crate::disk::{analyze_single, CrateInfo};
 
 mod analyzer;
@@ -7,7 +9,9 @@ mod disk;
 mod std_versions;
 
 fn main() -> anyhow::Result<()> {
-    println!(
+    env_logger::init();
+
+    info!(
         "{:?}",
         analyze_single(
             CrateInfo {
