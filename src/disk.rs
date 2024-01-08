@@ -42,6 +42,10 @@ pub struct Stats {
 
     pub clippy_warnings: usize,
     pub clippy_warnings_per_expr: f32,
+
+    pub async_fns: usize,
+    pub total_fns: usize,
+    pub async_fraction: f32,
 }
 
 fn rust_version_to_number(version: &str) -> Option<usize> {
@@ -182,5 +186,9 @@ pub fn analyze_single(info: CrateInfo, path: &Path, all_features: bool) -> anyho
 
         clippy_warnings,
         clippy_warnings_per_expr: clippy_warnings as f32 / version_analyzer.total_exprs as f32,
+
+        async_fns: version_analyzer.async_fns,
+        total_fns: version_analyzer.total_fns,
+        async_fraction: version_analyzer.async_fns as f32 / version_analyzer.total_fns as f32,
     })
 }

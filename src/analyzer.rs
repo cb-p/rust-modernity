@@ -11,6 +11,9 @@ pub struct VersionAnalyzer<'a> {
     pub version_counts: HashMap<String, usize>,
     pub total_exprs: usize,
     pub unsafe_exprs: usize,
+
+    pub total_fns: usize,
+    pub async_fns: usize,
 }
 
 impl<'a> VersionAnalyzer<'a> {
@@ -24,6 +27,9 @@ impl<'a> VersionAnalyzer<'a> {
             version_counts: HashMap::new(),
             total_exprs: 0,
             unsafe_exprs: 0,
+
+            total_fns: 0,
+            async_fns: 0,
         }
     }
 
@@ -185,6 +191,9 @@ impl<'a> VersionAnalyzer<'a> {
     }
 
     fn process_sig(&mut self, sig: syn::Signature) {
+        self.total_fns += 1;
+        self.async_fns += sig.asyncness.is_some() as usize;
+
         for arg in sig.inputs {
             if let syn::FnArg::Typed(typed) = arg {
                 self.process_type(*typed.ty);

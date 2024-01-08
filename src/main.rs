@@ -57,6 +57,8 @@ fn analyze_version(version: &Version, all_features: bool) -> anyhow::Result<Stat
 
     trace!("extracting archive...");
     let temp_dir = Path::new(TEMP_DIR);
+    let crate_dir = temp_dir.join(format!("{}-{}", version.crate_name, version.num));
+
     let decoder = GzDecoder::new(Cursor::new(res));
     let mut archive = Archive::new(decoder);
     archive.unpack(temp_dir).context("failed to unpack")?;
@@ -67,12 +69,12 @@ fn analyze_version(version: &Version, all_features: bool) -> anyhow::Result<Stat
             version: version.num.clone(),
             published_at: version.created_at.timestamp(),
         },
-        &temp_dir.join(format!("{}-{}", version.crate_name, version.num)),
+        &crate_dir,
         all_features,
     )
     .context("failed to analyze");
 
-    std::fs::remove_dir_all(temp_dir).context("failed to delete temp dir")?;
+    std::fs::remove_dir_all(crate_dir).context("failed to delete temp crate dir")?;
 
     stats
 }
