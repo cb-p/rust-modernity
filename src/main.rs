@@ -95,7 +95,26 @@ fn analyze_from_crates_io(
         .versions
         .into_iter()
         .filter(|version| !version.yanked)
+        .filter(|version| !version.num.contains('-')) // Remove all prereleases
         .collect::<Vec<_>>();
+
+    // Not really idiomatic, but its the best we can do.
+    // We don't want to go back in time, so we only consider increasing date of publishing.
+    // Since the version list is in reverse, in this case we check for decreasing.
+    let mut last_date = i64::MAX;
+    let mut i = 0;
+    while i < versions.len() {
+        let version = &versions[i];
+        let date = version.created_at.timestamp();
+
+        if date > last_date {
+            versions.remove(i);
+            continue;
+        } else {
+            last_date = date;
+            i += 1;
+        }
+    }
 
     // FIXME: Multiple versions released in a short time might make the
     //        version selection inaccurate.
