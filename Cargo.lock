@@ -1060,7 +1060,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-modernity"
+name = "ruvolution"
 version = "0.1.0"
 dependencies = [
  "anyhow",

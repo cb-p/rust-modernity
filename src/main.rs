@@ -25,7 +25,7 @@ const OUT_DIR: &str = "results";
 
 static API_CLIENT: Lazy<SyncClient> = Lazy::new(|| {
     SyncClient::new(
-        "rust-modernity (GitHub @chrrs)",
+        "Ruvolution (GitHub @chrrs)",
         Duration::from_millis(2000),
     )
     .expect("failed to initialize crates.io API client")
