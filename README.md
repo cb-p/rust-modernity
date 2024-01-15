@@ -2,6 +2,8 @@
 > Analyze the modernity of Rust code bases using various techniques.
 
 ## Setup
+You will need to have the Rust toolchain and the [`cargo-expand`](https://github.com/dtolnay/cargo-expand) utility installed in your local environment.
+
 Before using this tool, you need to expand the code of the `std`, `core` and `alloc` crates:
 
 1. Clone the [official Rust language repository](https://github.com/rust-lang/rust).
